@@ -63,11 +63,58 @@ Feedback Welcome!: https://github.com/zaquestion/lab/issues/74`,
 
 		boxes = make(map[string]*tview.TextView)
 		jobsCh := make(chan []*gitlab.Job)
+		depth := 0
 
 		a.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-			if event.Key() == tcell.KeyEscape || event.Rune() == 'q' {
+			if event.Rune() == 'q' || event.Key() == tcell.KeyEscape {
 				a.Stop()
 				return nil
+			}
+			stage := jobs[curJob].Stage
+			prev, next := adjacentStages(jobs, stage)
+			switch event.Key() {
+			case tcell.KeyLeft:
+				stage = prev
+			case tcell.KeyRight:
+				stage = next
+			}
+			switch event.Rune() {
+			case 'h':
+				stage = prev
+			case 'l':
+				stage = next
+			}
+			l, u := stageBounds(jobs, stage)
+
+			switch event.Key() {
+			case tcell.KeyDown:
+				depth++
+				if depth > u-l {
+					depth = u - l
+				}
+			case tcell.KeyUp:
+				depth--
+			}
+			switch event.Rune() {
+			case 'j':
+				depth++
+				if depth > u-l {
+					depth = u - l
+				}
+			case 'k':
+				depth--
+			case 'g':
+				depth = 0
+			case 'G':
+				depth = u - l
+			}
+
+			if depth < 0 {
+				depth = 0
+			}
+			curJob = l + depth
+			if curJob > u {
+				curJob = u
 			}
 			return event
 		})
@@ -80,9 +127,75 @@ Feedback Welcome!: https://github.com/zaquestion/lab/issues/74`,
 }
 
 var (
-	jobs  []*gitlab.Job
-	boxes map[string]*tview.TextView
+	curJob = 0
+	jobs   []*gitlab.Job
+	boxes  map[string]*tview.TextView
 )
+
+//TODO: get the upper and lower bound for the target stage (prev/next)
+// Jump appropriately prev/cur stage size respectively and bound
+
+// SCRATCH THAT -- maintain depth index and bound accordingly
+
+func jobIndex(jobs []*gitlab.Job, name string) int {
+	for i, v := range jobs {
+		if v.Name == name {
+			return i
+		}
+	}
+	return 0
+}
+
+func jobsInStage(jobs []*gitlab.Job, stage string) (count int) {
+	for _, v := range jobs {
+		if v.Stage == stage {
+			count++
+		}
+	}
+	return
+}
+
+func stageBounds(jobs []*gitlab.Job, s string) (l, u int) {
+	if len(jobs) <= 1 {
+		return 0, 0
+	}
+	p := jobs[0].Stage
+	for i, v := range jobs {
+		if v.Stage != s && u != 0 {
+			return
+		}
+		if v.Stage != p {
+			l = i
+			p = v.Stage
+		}
+		if v.Stage == s {
+			u = i
+		}
+	}
+	return
+}
+
+func adjacentStages(jobs []*gitlab.Job, s string) (p, n string) {
+	if len(jobs) == 0 {
+		return "", ""
+	}
+	p = jobs[0].Stage
+
+	for _, v := range jobs {
+		if v.Stage != s && n != "" {
+			n = v.Stage
+			return
+		}
+		if v.Stage == s {
+			n = "cur"
+		}
+		if n == "" {
+			p = v.Stage
+		}
+	}
+	n = jobs[len(jobs)-1].Stage
+	return
+}
 
 func jobsView(app *tview.Application, jobsCh chan []*gitlab.Job, root *tview.Pages) func(screen tcell.Screen) bool {
 	return func(screen tcell.Screen) bool {
@@ -188,6 +301,7 @@ func jobsView(app *tview.Application, jobsCh chan []*gitlab.Job, root *tview.Pag
 			rowIdx++
 
 		}
+		boxes["jobs-"+jobs[curJob].Name].Focus(nil)
 		return false
 	}
 }
@@ -199,7 +313,6 @@ func fmtDuration(d time.Duration) string {
 	return fmt.Sprintf("%02dm %02ds", m, s)
 }
 func box(root *tview.Pages, key string, x, y, w, h int) *tview.TextView {
-	//fmt.Printf("key: %s, x: %d, y: %d, w: %d, h: %d\n", key, x, y, w, h)
 	b, ok := boxes[key]
 	if !ok {
 		b = tview.NewTextView()
@@ -207,6 +320,10 @@ func box(root *tview.Pages, key string, x, y, w, h int) *tview.TextView {
 		boxes[key] = b
 	}
 	b.SetRect(x, y, w, h)
+	b.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		return event
+	})
+
 	root.AddPage(key, b, false, true)
 	return b
 }
