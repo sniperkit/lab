@@ -427,3 +427,25 @@ func CITrace(pid interface{}, branch, name string) (io.Reader, *gitlab.Job, erro
 
 	return r, job, err
 }
+
+func CIPlayOrRetry(pid interface{}, jobID int, status string) (*gitlab.Job, error) {
+	switch status {
+	case "pending", "running":
+		return nil, nil
+	case "manual":
+		j, _, err := lab.Jobs.PlayJob(pid, jobID)
+		if err != nil {
+			return nil, err
+		}
+		return j, nil
+	default:
+
+		j, _, err := lab.Jobs.RetryJob(pid, jobID)
+		if err != nil {
+			return nil, err
+		}
+
+		return j, nil
+	}
+	return nil, nil
+}

@@ -43,7 +43,7 @@ Feedback Welcome!: https://github.com/zaquestion/lab/issues/74`,
 		if len(args) > 0 {
 			ok, err := git.IsRemote(args[0])
 			if err != nil || !ok {
-				log.Fatal(args[0], "is not a remote:", err)
+				log.Fatal(args[0], " is not a remote:", err)
 			}
 			remote = args[0]
 		}
@@ -63,58 +63,29 @@ Feedback Welcome!: https://github.com/zaquestion/lab/issues/74`,
 
 		boxes = make(map[string]*tview.TextView)
 		jobsCh := make(chan []*gitlab.Job)
-		depth := 0
 
 		a.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 			if event.Rune() == 'q' || event.Key() == tcell.KeyEscape {
 				a.Stop()
 				return nil
 			}
-			stage := jobs[curJob].Stage
-			prev, next := adjacentStages(jobs, stage)
-			switch event.Key() {
-			case tcell.KeyLeft:
-				stage = prev
-			case tcell.KeyRight:
-				stage = next
-			}
+			handleNavigation(event) // mutates curJob
 			switch event.Rune() {
-			case 'h':
-				stage = prev
-			case 'l':
-				stage = next
-			}
-			l, u := stageBounds(jobs, stage)
-
-			switch event.Key() {
-			case tcell.KeyDown:
-				depth++
-				if depth > u-l {
-					depth = u - l
+			case 'p', 'r':
+				job, err := lab.CIPlayOrRetry(project.ID, jobs[curJob].ID, jobs[curJob].Status)
+				if err != nil {
+					a.Stop()
+					log.Fatal(err)
 				}
-			case tcell.KeyUp:
-				depth--
-			}
-			switch event.Rune() {
-			case 'j':
-				depth++
-				if depth > u-l {
-					depth = u - l
+				if job != nil {
+					jobs[curJob] = job
+					a.Draw()
 				}
-			case 'k':
-				depth--
-			case 'g':
-				depth = 0
-			case 'G':
-				depth = u - l
-			}
-
-			if depth < 0 {
-				depth = 0
-			}
-			curJob = l + depth
-			if curJob > u {
-				curJob = u
+			case 't':
+				if logsVisable {
+					root.RemovePage("logs")
+				}
+				logsVisable = !logsVisable
 			}
 			return event
 		})
@@ -127,32 +98,60 @@ Feedback Welcome!: https://github.com/zaquestion/lab/issues/74`,
 }
 
 var (
-	curJob = 0
-	jobs   []*gitlab.Job
-	boxes  map[string]*tview.TextView
+	logsVisable bool
+	depth       = 0
+	curJob      = 0
+	jobs        []*gitlab.Job
+	boxes       map[string]*tview.TextView
 )
 
-//TODO: get the upper and lower bound for the target stage (prev/next)
-// Jump appropriately prev/cur stage size respectively and bound
-
-// SCRATCH THAT -- maintain depth index and bound accordingly
-
-func jobIndex(jobs []*gitlab.Job, name string) int {
-	for i, v := range jobs {
-		if v.Name == name {
-			return i
-		}
+func handleNavigation(event *tcell.EventKey) {
+	stage := jobs[curJob].Stage
+	prev, next := adjacentStages(jobs, stage)
+	switch event.Key() {
+	case tcell.KeyLeft:
+		stage = prev
+	case tcell.KeyRight:
+		stage = next
 	}
-	return 0
-}
-
-func jobsInStage(jobs []*gitlab.Job, stage string) (count int) {
-	for _, v := range jobs {
-		if v.Stage == stage {
-			count++
-		}
+	switch event.Rune() {
+	case 'h':
+		stage = prev
+	case 'l':
+		stage = next
 	}
-	return
+	l, u := stageBounds(jobs, stage)
+
+	switch event.Key() {
+	case tcell.KeyDown:
+		depth++
+		if depth > u-l {
+			depth = u - l
+		}
+	case tcell.KeyUp:
+		depth--
+	}
+	switch event.Rune() {
+	case 'j':
+		depth++
+		if depth > u-l {
+			depth = u - l
+		}
+	case 'k':
+		depth--
+	case 'g':
+		depth = 0
+	case 'G':
+		depth = u - l
+	}
+
+	if depth < 0 {
+		depth = 0
+	}
+	curJob = l + depth
+	if curJob > u {
+		curJob = u
+	}
 }
 
 func stageBounds(jobs []*gitlab.Job, s string) (l, u int) {
@@ -201,6 +200,13 @@ func jobsView(app *tview.Application, jobsCh chan []*gitlab.Job, root *tview.Pag
 	return func(screen tcell.Screen) bool {
 		defer recoverPanic(app)
 		screen.Clear()
+		if logsVisable {
+			tv := tview.NewTextView()
+			root.AddAndSwitchToPage("logs", tv, true)
+			tv.SetText("aaaaaaa")
+			tv.SetBorder(true)
+			return false
+		}
 		select {
 		case jobs = <-jobsCh:
 		default:
@@ -297,6 +303,8 @@ func jobsView(app *tview.Application, jobsCh chan []*gitlab.Job, root *tview.Pag
 				}
 				b.SetText("\n" + fmtDuration(end.Sub(*j.StartedAt)))
 				b.SetTextAlign(tview.AlignRight)
+			} else {
+				b.SetText("")
 			}
 			rowIdx++
 
@@ -320,9 +328,6 @@ func box(root *tview.Pages, key string, x, y, w, h int) *tview.TextView {
 		boxes[key] = b
 	}
 	b.SetRect(x, y, w, h)
-	b.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		return event
-	})
 
 	root.AddPage(key, b, false, true)
 	return b
@@ -368,6 +373,9 @@ func connectJobsView(app *tview.Application) func(screen tcell.Screen) {
 }
 
 func connectJobs(screen tcell.Screen, jobs []*gitlab.Job, boxes map[string]*tview.TextView) error {
+	if logsVisable {
+		return nil
+	}
 	for i, j := range jobs {
 		if _, ok := boxes["jobs-"+j.Name]; !ok {
 			return errors.Errorf("jobs-%s not found at index: %d", jobs[i].Name, i)
