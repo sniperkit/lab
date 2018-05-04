@@ -69,28 +69,44 @@ Feedback Welcome!: https://github.com/zaquestion/lab/issues/74`,
 				a.Stop()
 				return nil
 			}
-			handleNavigation(event) // mutates curJob
+			handleNavigation(event, &curJob) // mutates curJob
 			switch event.Rune() {
 			case 'p', 'r':
-				job, err := lab.CIPlayOrRetry(project.ID, jobs[curJob].ID, jobs[curJob].Status)
-				if err != nil {
-					a.Stop()
-					log.Fatal(err)
+				if root.HasPage("yesno") {
+					break
 				}
-				if job != nil {
-					jobs[curJob] = job
-					a.Draw()
-				}
+				modal := tview.NewModal().
+					SetText(fmt.Sprintf("Are you sure you want to run %s", jobs[curJob].Name)).
+					AddButtons([]string{"Yes", "No"}).
+					SetDoneFunc(func(buttonIndex int, buttonLabel string) {
+						modalVisible = false
+						root.RemovePage("yesno")
+						if buttonLabel == "No" {
+							return
+						}
+						job, err := lab.CIPlayOrRetry(project.ID, jobs[curJob].ID, jobs[curJob].Status)
+						if err != nil {
+							a.Stop()
+							log.Fatal(err)
+						}
+						if job != nil {
+							jobs[curJob] = job
+							a.Draw()
+						}
+					})
+				root.AddPage("job-"+jobs[curJob].Name, modal, false, true)
+				return nil
 			case 't':
-				if logsVisable {
+				if logsVisible {
 					root.RemovePage("logs")
 				}
-				logsVisable = !logsVisable
+				logsVisible = !logsVisible
+				return nil
 			}
 			return event
 		})
 		go updateJobs(a, jobsCh, project.ID, branch)
-		go refreshScreen(a)
+		go refreshScreen(a, root)
 		if err := a.SetRoot(root, true).SetBeforeDrawFunc(jobsView(a, jobsCh, root)).SetAfterDrawFunc(connectJobsView(a)).Run(); err != nil {
 			log.Fatal(err)
 		}
@@ -98,15 +114,14 @@ Feedback Welcome!: https://github.com/zaquestion/lab/issues/74`,
 }
 
 var (
-	logsVisable bool
-	depth       = 0
-	curJob      = 0
-	jobs        []*gitlab.Job
-	boxes       map[string]*tview.TextView
+	logsVisible, modalVisible bool
+	depth, curJob             int
+	jobs                      []*gitlab.Job
+	boxes                     map[string]*tview.TextView
 )
 
-func handleNavigation(event *tcell.EventKey) {
-	stage := jobs[curJob].Stage
+func handleNavigation(event *tcell.EventKey, jobIdx *int) {
+	stage := jobs[*jobIdx].Stage
 	prev, next := adjacentStages(jobs, stage)
 	switch event.Key() {
 	case tcell.KeyLeft:
@@ -148,9 +163,9 @@ func handleNavigation(event *tcell.EventKey) {
 	if depth < 0 {
 		depth = 0
 	}
-	curJob = l + depth
-	if curJob > u {
-		curJob = u
+	*jobIdx = l + depth
+	if *jobIdx > u {
+		*jobIdx = u
 	}
 }
 
@@ -200,7 +215,7 @@ func jobsView(app *tview.Application, jobsCh chan []*gitlab.Job, root *tview.Pag
 	return func(screen tcell.Screen) bool {
 		defer recoverPanic(app)
 		screen.Clear()
-		if logsVisable {
+		if logsVisible {
 			tv := tview.NewTextView()
 			root.AddAndSwitchToPage("logs", tv, true)
 			tv.SetText("aaaaaaa")
@@ -303,6 +318,8 @@ func jobsView(app *tview.Application, jobsCh chan []*gitlab.Job, root *tview.Pag
 				}
 				b.SetText("\n" + fmtDuration(end.Sub(*j.StartedAt)))
 				b.SetTextAlign(tview.AlignRight)
+			} else if modalVisible {
+				return false
 			} else {
 				b.SetText("")
 			}
@@ -340,7 +357,7 @@ func recoverPanic(app *tview.Application) {
 	}
 }
 
-func refreshScreen(app *tview.Application) {
+func refreshScreen(app *tview.Application, root *tview.Pages) {
 	defer recoverPanic(app)
 	for {
 		app.Draw()
@@ -373,7 +390,7 @@ func connectJobsView(app *tview.Application) func(screen tcell.Screen) {
 }
 
 func connectJobs(screen tcell.Screen, jobs []*gitlab.Job, boxes map[string]*tview.TextView) error {
-	if logsVisable {
+	if logsVisible || modalVisible {
 		return nil
 	}
 	for i, j := range jobs {
