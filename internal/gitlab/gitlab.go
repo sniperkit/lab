@@ -220,7 +220,12 @@ func MRMerge(pid interface{}, id int) error {
 	return nil
 }
 
-// IssueCreate opens a new issue on a GitLab Project
+// MRApprove approves an mr on a GitLab project
+func MRApprove(pid interface{}, id int, sha string) error {
+	lab.MergeRequestApprovals.ApproveMergeRequest(pid, id, sha)
+}
+
+// IssueCreate opens a new issue on a GitLab project
 func IssueCreate(project string, opts *gitlab.CreateIssueOptions) (string, error) {
 	p, err := FindProject(project)
 	if err != nil {

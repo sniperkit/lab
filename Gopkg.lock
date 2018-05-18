@@ -4,8 +4,8 @@
 [[projects]]
   name = "github.com/avast/retry-go"
   packages = ["."]
-  revision = "5469272a8171235352a56af37e5f7facf814423f"
-  version = "1.0.1"
+  revision = "611bd93c6d74b0575c569d7c3a13de46f65840ff"
+  version = "1.0.2"
 
 [[projects]]
   name = "github.com/cpuguy83/go-md2man"
@@ -96,7 +96,7 @@
   branch = "master"
   name = "github.com/mitchellh/mapstructure"
   packages = ["."]
-  revision = "00c29f56e2386353d58c599509e8dc3801b0d716"
+  revision = "bb74f1db0675b241733089d5a1faa5dd8b0ef57b"
 
 [[projects]]
   name = "github.com/pelletier/go-toml"
@@ -120,7 +120,7 @@
   branch = "master"
   name = "github.com/rivo/tview"
   packages = ["."]
-  revision = "f855bee0205c35e6a055b86cc341effea0f446ce"
+  revision = "7d789421e39ba214721e0510912beeedcab5894d"
 
 [[projects]]
   name = "github.com/russross/blackfriday"
@@ -150,7 +150,7 @@
     ".",
     "doc"
   ]
-  revision = "615425954c3b0d9485a7027d4d451fdcdfdee84e"
+  revision = "ef82de70bb3f60c65fb8eebacbb2d122ef517385"
 
 [[projects]]
   branch = "master"
@@ -168,7 +168,7 @@
   branch = "master"
   name = "github.com/spf13/viper"
   packages = ["."]
-  revision = "8dc2790b029dc41e2b8ff772c63c26adbb1db70d"
+  revision = "15738813a09db5c8e5b60a19d67d3f9bd38da3a4"
 
 [[projects]]
   name = "github.com/stretchr/testify"
@@ -186,16 +186,16 @@
   version = "v0.1.2"
 
 [[projects]]
-  branch = "master"
   name = "github.com/xanzy/go-gitlab"
   packages = ["."]
-  revision = "60ef0cdb1b7e433233e0fb28f6cbe397e5c462a4"
+  revision = "2d5a724c42c21fb7fd1f0b76566ff9f26bd0b303"
+  version = "v0.10.2"
 
 [[projects]]
   branch = "master"
   name = "golang.org/x/crypto"
   packages = ["ssh/terminal"]
-  revision = "e73bf333ef8920dbb52ad18d4bd38ad9d9bc76d7"
+  revision = "2d027ae1dddd4694d54f7a8b6cbe78dca8720226"
 
 [[projects]]
   branch = "master"
@@ -204,7 +204,7 @@
     "unix",
     "windows"
   ]
-  revision = "79b0c6888797020a994db17c8510466c72fe75d9"
+  revision = "d0faeb539838e250bd0a9db4182d48d4a1915181"
 
 [[projects]]
   name = "golang.org/x/text"
