@@ -18,6 +18,11 @@ import (
 	lab "github.com/zaquestion/lab/internal/gitlab"
 )
 
+var (
+	pID    int
+	branch string
+)
+
 // ciViewCmd represents the ci command
 var ciViewCmd = &cobra.Command{
 	Use:   "view [remote]",
@@ -34,7 +39,8 @@ Feedback Welcome!: https://github.com/zaquestion/lab/issues/74`,
 			remote string
 		)
 
-		branch, err := git.CurrentBranch()
+		var err error
+		branch, err = git.CurrentBranch()
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -58,6 +64,7 @@ Feedback Welcome!: https://github.com/zaquestion/lab/issues/74`,
 		if err != nil {
 			log.Fatal(err)
 		}
+		pID = project.ID
 		root := tview.NewPages()
 		root.SetBorderPadding(1, 1, 2, 2)
 
@@ -69,18 +76,22 @@ Feedback Welcome!: https://github.com/zaquestion/lab/issues/74`,
 				a.Stop()
 				return nil
 			}
-			handleNavigation(event, &curJob) // mutates curJob
+			if !modalVisible {
+				handleNavigation(event, &curJob) // mutates curJob
+			}
 			switch event.Rune() {
 			case 'p', 'r':
-				if root.HasPage("yesno") {
+				if modalVisible {
 					break
 				}
+				modalVisible = true
 				modal := tview.NewModal().
 					SetText(fmt.Sprintf("Are you sure you want to run %s", jobs[curJob].Name)).
 					AddButtons([]string{"Yes", "No"}).
 					SetDoneFunc(func(buttonIndex int, buttonLabel string) {
-						modalVisible = false
 						root.RemovePage("yesno")
+						a.Draw()
+						modalVisible = false
 						if buttonLabel == "No" {
 							return
 						}
@@ -94,11 +105,13 @@ Feedback Welcome!: https://github.com/zaquestion/lab/issues/74`,
 							a.Draw()
 						}
 					})
-				root.AddPage("job-"+jobs[curJob].Name, modal, false, true)
+				root.AddAndSwitchToPage("yesno", modal, false)
+				a.Draw()
 				return nil
 			case 't':
 				if logsVisible {
 					root.RemovePage("logs")
+					a.Draw()
 				}
 				logsVisible = !logsVisible
 				return nil
@@ -215,19 +228,28 @@ func jobsView(app *tview.Application, jobsCh chan []*gitlab.Job, root *tview.Pag
 	return func(screen tcell.Screen) bool {
 		defer recoverPanic(app)
 		screen.Clear()
-		if logsVisible {
-			tv := tview.NewTextView()
-			root.AddAndSwitchToPage("logs", tv, true)
-			tv.SetText("aaaaaaa")
-			tv.SetBorder(true)
-			return false
-		}
 		select {
 		case jobs = <-jobsCh:
 		default:
 			if len(jobs) == 0 {
 				jobs = <-jobsCh
 			}
+		}
+		if modalVisible {
+			return false
+		}
+		if logsVisible {
+			tv := tview.NewTextView()
+			tv.SetBorder(true)
+			root.AddAndSwitchToPage("logs-"+jobs[curJob].Name, tv, true)
+			go func() {
+				err := doTrace(tv, pID, branch, jobs[curJob].Name)
+				if err != nil {
+					app.Stop()
+					log.Fatal(err)
+				}
+			}()
+			return false
 		}
 		px, _, maxX, maxY := root.GetInnerRect()
 		var (
@@ -318,8 +340,6 @@ func jobsView(app *tview.Application, jobsCh chan []*gitlab.Job, root *tview.Pag
 				}
 				b.SetText("\n" + fmtDuration(end.Sub(*j.StartedAt)))
 				b.SetTextAlign(tview.AlignRight)
-			} else if modalVisible {
-				return false
 			} else {
 				b.SetText("")
 			}
@@ -368,6 +388,10 @@ func refreshScreen(app *tview.Application, root *tview.Pages) {
 func updateJobs(app *tview.Application, jobsCh chan []*gitlab.Job, pid interface{}, branch string) {
 	defer recoverPanic(app)
 	for {
+		if modalVisible {
+			time.Sleep(time.Second * 1)
+			continue
+		}
 		jobs, err := lab.CIJobs(pid, branch)
 		if len(jobs) == 0 || err != nil {
 			app.Stop()
