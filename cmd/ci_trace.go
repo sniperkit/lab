@@ -66,6 +66,7 @@ func doTrace(w io.Writer, pid interface{}, branch, name string) error {
 		once   sync.Once
 		offset int64
 	)
+	fmt.Println("printing")
 	for range time.NewTicker(time.Second * 3).C {
 		trace, job, err := lab.CITrace(pid, branch, name)
 		if job == nil {
@@ -85,6 +86,7 @@ func doTrace(w io.Writer, pid interface{}, branch, name string) error {
 			}
 			fmt.Fprintf(w, "Showing logs for %s job #%d\n", job.Name, job.ID)
 		})
+		// TODO: can trace be passed directly to the readseaker?
 		buf, err := ioutil.ReadAll(trace)
 		if err != nil {
 			log.Fatal(err)
@@ -94,7 +96,8 @@ func doTrace(w io.Writer, pid interface{}, branch, name string) error {
 		new, err := ioutil.ReadAll(r)
 
 		offset += int64(len(new))
-		fmt.Print(string(new))
+		s := strings.TrimLeft(string(new), "\015")
+		fmt.Fprint(w, s)
 		if job.Status == "success" ||
 			job.Status == "failed" ||
 			job.Status == "cancelled" {

@@ -76,7 +76,7 @@ Feedback Welcome!: https://github.com/zaquestion/lab/issues/74`,
 				a.Stop()
 				return nil
 			}
-			if !modalVisible {
+			if !modalVisible && !logsVisible {
 				handleNavigation(event, &curJob) // mutates curJob
 			}
 			switch event.Rune() {
@@ -239,16 +239,19 @@ func jobsView(app *tview.Application, jobsCh chan []*gitlab.Job, root *tview.Pag
 			return false
 		}
 		if logsVisible {
-			tv := tview.NewTextView()
-			tv.SetBorder(true)
-			root.AddAndSwitchToPage("logs-"+jobs[curJob].Name, tv, true)
-			go func() {
-				err := doTrace(tv, pID, branch, jobs[curJob].Name)
-				if err != nil {
-					app.Stop()
-					log.Fatal(err)
-				}
-			}()
+			if !root.HasPage("logs-" + jobs[curJob].Name) {
+				tv := tview.NewTextView()
+				tv.SetBorder(true)
+
+				go func() {
+					err := doTrace(tview.ANSIIWriter(tv), pID, branch, jobs[curJob].Name)
+					if err != nil {
+						app.Stop()
+						log.Fatal(err)
+					}
+				}()
+				root.AddAndSwitchToPage("logs-"+jobs[curJob].Name, tv, true)
+			}
 			return false
 		}
 		px, _, maxX, maxY := root.GetInnerRect()
